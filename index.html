@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content, viewport-fit=cover">
+    <title>Break the Ice - Simple Edition</title>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --app-height: 100dvh;
+            --primary-color: #1e293b;
+        }
+
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+            background-color: #f0f4f8;
+            height: var(--app-height);
+            width: 100vw;
+            overflow: hidden;
+            position: fixed;
+            color: var(--primary-color);
+        }
+
+        #root {
+            height: 100%;
+            width: 100%;
+        }
+
+        /* 吹き出しのアニメーション */
+        .bubble-enter {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            opacity: 0;
+            transform: scale(0.9) translateY(10px);
+            transform-origin: bottom center;
+        }
+
+        @keyframes popIn {
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* 背景パターン */
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(203, 213, 225, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(203, 213, 225, 0.3) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+        }
+
+        /* デフォルトキャラクター */
+        .mascot-wrapper {
+            font-size: 20vh; /* 少し大きくして存在感を出す */
+            line-height: 1;
+            position: relative;
+            animation: breathe 3s ease-in-out infinite;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* 吹き出し本体 */
+        .speech-bubble {
+            position: relative;
+            background: #ffffff;
+            border-radius: 40px;
+            padding: 3rem 2rem;
+            text-align: center;
+            box-shadow: 
+                0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+                0 10px 10px -5px rgba(0, 0, 0, 0.04),
+                inset 0 -4px 0 rgba(0,0,0,0.05);
+            border: 4px solid var(--primary-color);
+            max-width: 90%;
+            width: 700px;
+            z-index: 20;
+            /* 距離感調整: ペンギンの直上に配置 */
+            margin-bottom: 2rem; 
+        }
+
+        /* 吹き出しのしっぽ */
+        .speech-bubble::after, .speech-bubble::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-style: solid;
+        }
+
+        .speech-bubble::after {
+            bottom: -24px;
+            border-width: 24px 24px 0;
+            border-color: var(--primary-color) transparent transparent transparent;
+        }
+        
+        .speech-bubble::before {
+            bottom: -18px;
+            border-width: 20px 20px 0;
+            border-color: #ffffff transparent transparent transparent;
+            z-index: 1;
+        }
+
+        /* ボタン類 */
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+            transition: all 0.2s;
+        }
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+
+        .btn-nav {
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #e2e8f0;
+            color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            font-weight: 900;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .btn-nav:hover {
+            background: #ffffff;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px -1px rgba(0, 0, 0, 0.1);
+        }
+        .btn-nav:active {
+            transform: translateY(0);
+        }
+        .btn-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        // --- 固定質問リスト（自己紹介フェーズ） ---
+        const INTRO_QUESTIONS = [
+            "スラック名・名前は？",
+            "レポート提出できた？",
+            "なんの授業とってる？",
+            "試験勉強どうする？",
+            "名前やアイコンの由来は？",
+            "グループやユニット決めた？",
+            "子供の頃の夢は？",
+            "将来したいことは？"
+        ];
+
+        // --- ランダム質問リスト（固定終了後） ---
+        const RANDOM_QUESTIONS = [
+            "最近食べたもので一番美味しかったものは？",
+            "最後に「ぬくぬく寝坊」したのはいつ？",
+            "朝ごはんはパン派？ご飯派？それとも食べない派？",
+            "好きなおにぎりの具ベスト1は？",
+            "最近コンビニで無駄遣いしたものは？",
+            "目玉焼きには何をかける？",
+            "今日のお化粧（または身支度）に何時間かけた？100時間くらい？",
+            "もし3億円当たったら、まず何を買う？（リアルなやつで）",
+            "最近、誰（あるいは何）を熱く抱きしめた？",
+            "自分の前世は何だったと思う？",
+            "明日から「猫」として生きなきゃいけないなら、まず何をする？",
+            "無人島に一つだけ調味料を持っていくなら何？",
+            "もし魔法が一つだけ使えるなら、どんな地味な魔法にする？",
+            "最近した「小さな悪いこと」を教えて（例：夜中にポテチ食べた）",
+            "ゾンビ映画の世界になったら、自分は最初にやられるキャラ？最後まで生き残るキャラ？",
+            "自分を動物に例えると何？（ただし可愛くない動物限定で）",
+            "最近「あ、自分疲れてるな」と思った瞬間は？",
+            "透明人間になったら、まずどこの部屋に忍び込む？",
+            "初対面の人と話すとき、一番緊張するのはどの瞬間？",
+            "自分の性格を漢字一文字で表すと？",
+            "最近、心が動かされた映画や本はある？",
+            "人生で一番「運が良かった」と思う出来事は？",
+            "もし今の仕事をしていなかったら、何をしていると思う？",
+            "「これだけは譲れない」という変なこだわりある？",
+            "学生時代の自分に一言アドバイスするなら？",
+            "最近、誰かに感謝したことは？",
+            "休日は家でじっとしていたい？外に出たい？",
+            "「大人になったな」と感じる瞬間は？",
+            "逆に「まだまだ子供だな」と思う瞬間は？",
+            "今、冷蔵庫の中に何が入ってる？",
+            "スマホの写真フォルダの最新の一枚は何？（見せなくてOK、説明して）",
+            "最近検索したワード、言える範囲で教えて",
+            "カバンの中に必ず入れている「お守り」的なアイテムは？",
+            "一番好きな「におい」は？",
+            "もし1週間休みが取れたらどこに行きたい？",
+            "宇宙人はいると思う？それとも私たちが宇宙人？",
+            "幽霊を見たら話しかける？逃げる？",
+            "自分の家の「変なルール」ある？",
+            "最近見た夢の内容を覚えている範囲で教えて",
+            "人生最後の晩餐、メニューは何にする？",
+            "今までで一番変なプレゼントをもらったことは？",
+            "カラオケの十八番は？（歌わなくていいよ）",
+            "電車で隣の人が寝て寄りかかってきたらどうする？",
+            "宝くじが当たる確率は信じる？信じない？",
+            "「これ、美味しくないな」と思った料理、完食する？残す？",
+            "美容院での会話、好き？苦手？",
+            "好きな「擬音語」は？（例：もふもふ、ツルツル）",
+            "一生、麺類しか食べられないか、米しか食べられないか、どっち？",
+            "今の服装のテーマを適当に決めてください",
+            "自分を褒めるとしたら、どの部分？",
+            "最近「やっちゃった」と思った失敗談は？",
+            "実は苦手な「世間で人気のもの」ある？",
+            "「推し」はいますか？いるなら30秒で布教してください",
+            "スマホの充電、何％になったら焦る？",
+            "寝る時の体勢は？（仰向け？横向き？大の字？）",
+            "好きな季節と、その理由は？",
+            "もしYoutuberになるなら、どんなジャンル？",
+            "「これにお金かけるのは無駄だ」と思うものは？",
+            "逆に「これにはいくらでも出せる」ものは？",
+            "最近、大爆笑したことは？",
+            "もし自分がRPGの敵キャラなら、どんな攻撃をしてくる？",
+            "バイキング（食べ放題）での作戦を教えて",
+            "目覚まし時計は一回で起きる？スヌーズ機能使う？",
+            "お風呂に入っている時、何考えてる？",
+            "もし総理大臣になったら、まずどんな変な法律を作る？",
+            "自分の取扱説明書の1行目には何て書いてある？",
+            "最近、「歳とったな…」と膝以外で感じたことは？",
+            "コンビニのおにぎりの開け方、失敗したことある？",
+            "たい焼きは頭から食べる？尻尾から食べる？背びれから？",
+            "「実は私、〇〇なんです」という嘘を一つついてください",
+            "今日ここに来るまでに見たもので、一番印象的だったものは？",
+            "もし過去に戻れるなら、いつの時点に戻る？",
+            "もし未来に行けるなら、何年後が見たい？",
+            "超能力が一つ手に入るとしたら、透視？瞬間移動？それとも念力？",
+            "自分の人生にBGMをつけるとしたら、今のシーンは何の曲？",
+            "好きな寿司ネタベスト3は？",
+            "焼肉は、焼く係？食べる係？",
+            "ジェットコースターは好き？嫌い？",
+            "お化け屋敷は先頭を行く？最後尾？",
+            "映画館ではポップコーン食べる？",
+            "好きな・落ち着く場所は？（家以外で）",
+            "自分の直したい癖は？",
+            "言われて一番嬉しい褒め言葉は？",
+            "言われて一番傷つく言葉は？",
+            "「運命」って信じる？",
+            "最近、感動して泣いた？",
+            "子供の頃のあだ名は？",
+            "好きなYouTuberやインフルエンサーは？",
+            "最近ハマっているアプリは？",
+            "寝る前に必ずすることは？",
+            "朝起きて一番にすることは？",
+            "得意料理は？（カップ麺のお湯入れも可）",
+            "一番長く続いた趣味は？",
+            "これから挑戦してみたいことは？",
+            "「これがあれば生きていける」というアイテムは？",
+            "無人島に誰か一人連れて行くなら誰？（有名人でも可）",
+            "自分の性格を一言で言うと？",
+            "周りからどんな人だと言われることが多い？",
+            "ストレス発散方法は？",
+            "一番古い記憶は？",
+            "学生時代の部活は？",
+            "好きな教科は？",
+            "嫌いな教科は？",
+            "給食で好きだったメニューは？",
+            "好きな動物は？",
+            "犬派？猫派？",
+            "夏休みの宿題は先にやる？最後にやる？",
+            "テスト勉強は一夜漬け？コツコツ？",
+            "好きな色は？",
+            "その色が好きな理由は？",
+            "自分の名前の由来知ってる？",
+            "兄弟姉妹はいる？",
+            "家族の中で一番仲が良いのは？",
+            "実家暮らし？一人暮らし？",
+            "理想の休日の過ごし方は？",
+            "旅行に行くなら国内？海外？",
+            "一番印象に残っている旅行先は？",
+            "行ってみたい国は？",
+            "英語は話せる？",
+            "好きな言葉や座右の銘は？",
+            "尊敬する人は？"
+        ];
+
+        // --- Components ---
+
+        const Mascot = () => (
+            <div className="mascot-wrapper">
+                {/* ただのペンギン */}
+                <span className="relative inline-block">
+                    🐧
+                </span>
+            </div>
+        );
+
+        const TitleScreen = ({ onStart }) => {
+            return (
+                <div className="flex flex-col items-center justify-center h-full p-6 text-center relative">
+                    <div className="bg-grid"></div>
+                    
+                    <div className="max-w-md w-full space-y-10 z-10">
+                        <div>
+                            <h1 className="text-5xl md:text-7xl font-black text-slate-800 mb-4 tracking-tighter drop-shadow-sm">
+                                Break the Ice
+                            </h1>
+                            <div className="inline-block px-4 py-1 bg-slate-200 rounded-full text-slate-600 font-bold text-sm">
+                                自己紹介 & 画面共有ツール
+                            </div>
+                        </div>
+
+                        <div className="bg-white/80 backdrop-blur-sm p-8 rounded-3xl border-4 border-slate-800 shadow-xl text-left space-y-4">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <span className="text-2xl">📖</span> 遊び方
+                            </h2>
+                            <ul className="space-y-3 font-bold text-slate-600">
+                                <li className="flex items-start gap-2">
+                                    <span className="text-slate-400 mt-1">●</span>
+                                    <span>「スタート」で自己紹介タイム開始！</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-slate-400 mt-1">●</span>
+                                    <span>画面をクリック、またはキーボードの矢印キーで進む・戻る</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-slate-400 mt-1">●</span>
+                                    <span>固定質問が終わるとランダム質問へ</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <button 
+                            onClick={onStart}
+                            className="w-full py-6 btn-primary rounded-2xl font-black text-3xl shadow-2xl border-b-8 border-slate-900 active:border-b-0 active:translate-y-2"
+                        >
+                            スタート！
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const GameScreen = ({ onNext, onPrev, currentQuestion, canGoBack, onExit }) => {
+            // キーボードイベントハンドリング
+            React.useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+                        onNext();
+                    } else if (e.key === 'ArrowLeft') {
+                        if (canGoBack) onPrev();
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [onNext, onPrev, canGoBack]);
+
+            return (
+                <div 
+                    onClick={onNext}
+                    className="h-full w-full relative flex flex-col items-center justify-center p-4 cursor-pointer overflow-hidden select-none"
+                >
+                    <div className="bg-grid"></div>
+
+                    {/* ヘッダー: 終了ボタン */}
+                    <div className="absolute top-0 left-0 w-full p-4 flex justify-end z-50 pointer-events-none">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onExit(); }}
+                            className="bg-white/80 px-5 py-2 rounded-full text-sm font-black text-slate-500 hover:bg-slate-100 hover:text-slate-700 border-2 border-slate-200 pointer-events-auto shadow-sm transition backdrop-blur-sm"
+                        >
+                            終了
+                        </button>
+                    </div>
+
+                    {/* メインエリア */}
+                    <div className="flex flex-col items-center justify-center transform translate-y-4 w-full">
+                        <div key={currentQuestion} className="speech-bubble bubble-enter">
+                            <h2 className="text-3xl md:text-5xl font-black leading-relaxed tracking-wide text-slate-800">
+                                {currentQuestion}
+                            </h2>
+                        </div>
+                        <Mascot />
+                    </div>
+
+                    {/* フッター: ナビゲーション */}
+                    <div className="absolute bottom-0 left-0 w-full p-6 flex justify-between items-end z-50 pointer-events-none">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onPrev(); }}
+                            disabled={!canGoBack}
+                            className="btn-nav pointer-events-auto"
+                        >
+                            <span>←</span> 前へ
+                        </button>
+                        
+                        <div className="text-slate-400 text-xs font-bold bg-white/50 px-3 py-1 rounded-full mb-2">
+                            Click or Arrow Keys
+                        </div>
+
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onNext(); }}
+                            className="btn-nav pointer-events-auto"
+                        >
+                            次へ <span>→</span>
+                        </button>
+                    </div>
+
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [isPlaying, setIsPlaying] = React.useState(false);
+            const [history, setHistory] = React.useState([]);
+            const [currentIndex, setCurrentIndex] = React.useState(-1);
+
+            // 次の質問を生成して返す（履歴には追加しない、純粋な生成ロジック）
+            const generateNextQuestion = (index) => {
+                if (index < INTRO_QUESTIONS.length) {
+                    return INTRO_QUESTIONS[index];
+                } else {
+                    return RANDOM_QUESTIONS[Math.floor(Math.random() * RANDOM_QUESTIONS.length)];
+                }
+            };
+
+            const startGame = () => {
+                const firstQ = generateNextQuestion(0);
+                setHistory([firstQ]);
+                setCurrentIndex(0);
+                setIsPlaying(true);
+            };
+
+            const goNext = () => {
+                if (currentIndex < history.length - 1) {
+                    // 履歴にある場合は進むだけ
+                    setCurrentIndex(prev => prev + 1);
+                } else {
+                    // 新しい質問を生成
+                    // current length will be the index of the new question
+                    const newQ = generateNextQuestion(history.length);
+                    setHistory(prev => [...prev, newQ]);
+                    setCurrentIndex(prev => prev + 1);
+                }
+            };
+
+            const goPrev = () => {
+                if (currentIndex > 0) {
+                    setCurrentIndex(prev => prev - 1);
+                }
+            };
+
+            const exitGame = () => {
+                setIsPlaying(false);
+                setHistory([]);
+                setCurrentIndex(-1);
+            };
+
+            // 現在表示すべき質問
+            const currentQ = history[currentIndex] || "";
+
+            return (
+                <div className="antialiased h-full">
+                    {!isPlaying ? (
+                        <TitleScreen onStart={startGame} />
+                    ) : (
+                        <GameScreen 
+                            onNext={goNext} 
+                            onPrev={goPrev}
+                            currentQuestion={currentQ}
+                            canGoBack={currentIndex > 0}
+                            onExit={exitGame}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        root.render(<App />);
+    </script>
+</body>
+</html>
